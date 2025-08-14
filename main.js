@@ -52,8 +52,53 @@ groundMesh.instanceMatrix.needsUpdate = true;
 const blocks = new THREE.Group();
 scene.add(blocks);
 
-const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
-const blockMaterial = new THREE.MeshLambertMaterial({ color: 0xDEB887 }); // BurlyWood
+// --- Inventory and Block Types ---
+const blockTypes = {
+    wood: { name: 'Wood', material: new THREE.MeshLambertMaterial({ color: 0xDEB887 }) },
+    stone: { name: 'Stone', material: new THREE.MeshLambertMaterial({ color: 0x808080 }) },
+    dirt: { name: 'Dirt', material: new THREE.MeshLambertMaterial({ color: 0x9B7653 }) },
+    sand: { name: 'Sand', material: new THREE.MeshLambertMaterial({ color: 0xF4A460 }) },
+    leaves: { name: 'Leaves', material: new THREE.MeshLambertMaterial({ color: 0x228b22 }) },
+    bricks: { name: 'Bricks', material: new THREE.MeshLambertMaterial({ color: 0xB22222 }) },
+    glass: { name: 'Glass', material: new THREE.MeshLambertMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5 }) },
+};
+
+let selectedBlockType = 'wood'; // The key of the selected block in blockTypes
+
+const inventoryElement = document.getElementById('inventory');
+const hotbarElement = document.getElementById('hotbar');
+
+// Populate UI and add listeners
+Object.keys(blockTypes).forEach((key, index) => {
+    const slot = document.createElement('div');
+    slot.classList.add('slot');
+    slot.dataset.blockType = key;
+    slot.style.backgroundColor = `#${blockTypes[key].material.color.getHexString()}`;
+    slot.textContent = blockTypes[key].name;
+
+    slot.addEventListener('click', () => {
+        selectedBlockType = key;
+        updateSelectionUI();
+    });
+
+    if (index < 9) { // First 9 items go to hotbar
+        hotbarElement.appendChild(slot.cloneNode(true)).addEventListener('click', () => {
+             selectedBlockType = key;
+             updateSelectionUI();
+        });
+    }
+    inventoryElement.appendChild(slot);
+});
+
+function updateSelectionUI() {
+    // Clear previous selection
+    document.querySelectorAll('.slot').forEach(s => s.classList.remove('selected'));
+    // Highlight new selection
+    document.querySelectorAll(`.slot[data-block-type="${selectedBlockType}"]`).forEach(s => s.classList.add('selected'));
+}
+
+updateSelectionUI();
+
 
 // Raycaster for block interaction
 const raycaster = new THREE.Raycaster();
@@ -85,6 +130,7 @@ document.body.addEventListener('click', () => {
 
 controls.addEventListener('lock', () => {
     instructions.style.display = 'none';
+    inventoryElement.style.display = 'none';
 });
 
 controls.addEventListener('unlock', () => {
@@ -94,18 +140,30 @@ controls.addEventListener('unlock', () => {
 
 // Keyboard input state
 const keys = {
-    w: false, a: false, s: false, d: false
+    w: false, a: false, s: false, d: false,
+    ' ': false, // space
+    shift: false
 };
 
 window.addEventListener('keydown', (event) => {
-    if (event.key.toLowerCase() in keys) {
-        keys[event.key.toLowerCase()] = true;
+    const key = event.key.toLowerCase();
+    if (key in keys) {
+        keys[key] = true;
+    }
+
+    if (key === 'i') {
+        const isVisible = inventoryElement.style.display === 'grid';
+        inventoryElement.style.display = isVisible ? 'none' : 'grid';
+        if (!isVisible) {
+            controls.unlock(); // Show cursor when opening inventory
+        }
     }
 });
 
 window.addEventListener('keyup', (event) => {
-    if (event.key.toLowerCase() in keys) {
-        keys[event.key.toLowerCase()] = false;
+    const key = event.key.toLowerCase();
+    if (key in keys) {
+        keys[key] = false;
     }
 });
 
@@ -138,7 +196,8 @@ window.addEventListener('mousedown', (event) => {
         }
         // Right click (2) to place
         else if (event.button === 2) {
-            const newBlock = new THREE.Mesh(blockGeometry, blockMaterial);
+            const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const newBlock = new THREE.Mesh(blockGeometry, blockTypes[selectedBlockType].material);
             const newPos = intersection.object.position.clone();
 
             if (intersection.object === groundMesh) {
@@ -167,12 +226,18 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta(); // Time since last frame
 
-    // Simplified movement with PointerLockControls
+    // Horizontal movement with PointerLockControls
     const moveSpeed = 5 * delta; // Use delta for frame-rate independent speed
     if (keys.w) controls.moveForward(moveSpeed);
     if (keys.s) controls.moveForward(-moveSpeed);
     if (keys.a) controls.moveRight(-moveSpeed);
     if (keys.d) controls.moveRight(moveSpeed);
+
+    // Vertical movement
+    const verticalSpeed = 5 * delta;
+    if (keys[' ']) camera.position.y += verticalSpeed;
+    if (keys.shift) camera.position.y -= verticalSpeed;
+
 
     renderer.render(scene, camera);
 }
